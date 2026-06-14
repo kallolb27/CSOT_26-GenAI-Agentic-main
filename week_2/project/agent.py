@@ -1,4 +1,5 @@
 import os
+import xml.etree.ElementTree as ET
 import json
 import requests
 import trafilatura
@@ -70,6 +71,47 @@ def real_web_fetch(url: str) -> str:
         return text[:6000] + "\n\n[...Content truncated to save context budget...]" if len(text) > 6000 else text
     except Exception as e:
         return f"Error trying to fetch webpage: {str(e)}"
+    
+def discover_papers(query: str, max_results: int = 3) -> str:
+    """Search for academic papers using the ArXiv API."""
+    try:
+        # Format the search query for the API
+        search_query = query.replace(" ", "+")
+        url = f"http://export.arxiv.org/api/query?search_query=all:{search_query}&start=0&max_results={max_results}"
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        # Parse the XML response from ArXiv
+        root = ET.fromstring(response.text)
+        ns = {'atom': 'http://www.w3.org/2005/Atom'}
+        
+        results = []
+        for entry in root.findall('atom:entry', ns):
+            # Extract the specific ID, Title, and Abstract
+            paper_id = entry.find('atom:id', ns).text.split('/abs/')[-1]
+            title = entry.find('atom:title', ns).text.replace('\n', ' ').strip()
+            summary = entry.find('atom:summary', ns).text.replace('\n', ' ').strip()
+            
+            results.append(f"Paper ID: {paper_id}\nTitle: {title}\nAbstract: {summary[:500]}...\n---")
+            
+        return "\n".join(results) if results else "No academic papers found for this query."
+    except Exception as e:
+        return f"Error discovering papers: {str(e)}"
+
+def get_paper_content(paper_id: str) -> str:
+    """Fetch the text content of a specific paper by its ArXiv ID."""
+    # We can cleverly reuse our existing web scraper to read the paper's webpage!
+    url = f"https://arxiv.org/html/{paper_id}v1"
+    
+    result = real_web_fetch(url)
+    
+    # If the HTML version doesn't exist, fallback to scraping the abstract page
+    if "Error" in result or "not extract" in result:
+        fallback_url = f"https://arxiv.org/abs/{paper_id}"
+        return real_web_fetch(fallback_url)
+        
+    return result
 
 # --- TOOL BLUEPRINTS ---
 
@@ -102,6 +144,34 @@ final_tools = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "discover_papers",
+            "description": "Search the AlphaXiv/ArXiv database for academic papers, preprints, and scientific research.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The scientific or academic search query."}
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_paper_content",
+            "description": "Read the content of a specific academic paper using its unique ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paper_id": {"type": "string", "description": "The unique paper ID (e.g., '2401.12345')."}
+                },
+                "required": ["paper_id"],
+            },
+        },
+    },
 ]
 
 # --- THE INTERFACE LAYOUT ---
@@ -127,10 +197,11 @@ class PerplexityApp(App):
     }
     """
     
+    # Updated Key Bindings to match rubric requirements
     BINDINGS = [
-        Binding("f1", "clear_display", "Clear Screen"),
-        Binding("f2", "clear_history", "Wipe Memory"),
-        Binding("escape", "quit", "Quit Application"),
+        Binding("ctrl+l", "clear_display", "Clear Screen"),
+        Binding("ctrl+k", "clear_history", "Wipe Memory"),
+        Binding("ctrl+q", "quit", "Quit Application"),
     ]
     
     def compose(self) -> ComposeResult:
@@ -150,10 +221,9 @@ class PerplexityApp(App):
         self.conversation_history = [
             {
                 "role": "system", 
-                "content": "You are a professional research agent with live web search powers. Use search tools when asked about current facts or weather. Remember past user inputs in the conversation history. Summarize findings with clear markdown."
+                "content": "You are a professional research agent. IF the user asks for academic papers, scientific research, or specific studies, you MUST use the `discover_papers` and `get_paper_content` tools. For general facts or weather, use `real_web_search`. Summarize findings with clear markdown."
             }
         ]
-        # Add this right below your conversation_history array
         self.session_tokens = 0
         
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -176,16 +246,16 @@ class PerplexityApp(App):
                 tools=final_tools,
             )
             
-            # --- NEW API SAFETY GUARD ---
+            # Safety Guard for API Network Failures / Timeouts
             if not response.choices:
                 error_info = getattr(response, "error", "Unknown API Error. The model might be overloaded.")
                 self.call_from_thread(self.chat_log.write, f"\n[bold red]Network Error:[/bold red] {error_info}\n")
                 return
-            # ----------------------------
             
             message = response.choices[0].message
             self.conversation_history.append(message)
             
+            # Token Usage Tracker
             if response.usage:
                 turn_tokens = response.usage.total_tokens
                 self.session_tokens += turn_tokens
@@ -203,11 +273,14 @@ class PerplexityApp(App):
                 args = json.loads(tool_call.function.arguments)
                 
                 self.call_from_thread(self.tool_log.write, f"[bold yellow]⚡ RUNNING TOOL:[/bold yellow] {tool_name}({args})")
-                
                 if tool_name == "real_web_search":
                     tool_result = real_web_search(args.get("query"))
                 elif tool_name == "real_web_fetch":
                     tool_result = real_web_fetch(args.get("url"))
+                elif tool_name == "discover_papers":       # <-- ADD THIS
+                    tool_result = discover_papers(args.get("query"))
+                elif tool_name == "get_paper_content":     # <-- ADD THIS
+                    tool_result = get_paper_content(args.get("paper_id"))
                 else:
                     tool_result = "Error: Requested tool function not found."
                     
@@ -232,11 +305,13 @@ class PerplexityApp(App):
         self.chat_log.clear()
         self.tool_log.clear()
         self.conversation_history = [
-            {"role": "system", "content": "You are a professional research agent with live web search powers. Use search tools when asked about current facts or weather. Summarize findings with clear markdown."}
+            {
+                "role": "system", 
+                "content": "You are a professional research agent. IF the user asks for academic papers, scientific research, or specific studies, you MUST use the `discover_papers` and `get_paper_content` tools. For general facts or weather, use `real_web_search`. Summarize findings with clear markdown."
+            }
         ]
-        self.session_tokens = 0  # <-- ADD THIS LINE
+        self.session_tokens = 0
         self.chat_log.write("[bold cyan]🧹 Memory wiped clean and screen reset. Fresh conversation started![/bold cyan]\n")
-
 if __name__ == "__main__":
     app = PerplexityApp()
     app.run()
