@@ -20,22 +20,22 @@ from textual import work
 from agent import Agent
 
 class TUIAgent(Agent):
-    """The TUI version of our agent. It overrides _emit to print to the screen."""
-    
-    def __init__(self, session_id: str | None = None):
+    def __init__(self, session_id=None, ui_callback=None):
         super().__init__(session_id)
-        self.app = None # We will attach the UI app here so the brain can talk to it
+        self.ui_callback = ui_callback
 
     def _emit(self, event: str, **data) -> None:
-        """This intercepts the tool logs and sends them to the UI's sidebar!"""
-        if self.app:
+        # 1. Send visual updates to the TUI sidebar (only if callback is attached)
+        if hasattr(self, 'ui_callback') and self.ui_callback:
             if event == "tool_start":
-                # call_from_thread is required because the AI thinks in the background
-                self.app.call_from_thread(self.app.log_tool, f"⚙️ [yellow]Starting:[/yellow] {data['name']}")
+                self.ui_callback(f"⚙️  [bold orange3]Starting:[/bold orange3] {data.get('name')}")
             elif event == "tool_end":
-                self.app.call_from_thread(self.app.log_tool, f"✅ [green]Finished:[/green] {data['name']}")
+                self.ui_callback(f"✅ [bold green]Finished:[/bold green] {data.get('name')}")
             elif event == "tool_error":
-                self.app.call_from_thread(self.app.log_tool, f"❌ [red]Error:[/red] {data['name']} - {data['error']}")
+                self.ui_callback(f"❌ [bold red]Error:[/bold red] {data.get('name')}")
+                
+        # 2. TRIGGER THE FILE LOGGER IN THE BASE CLASS!
+        super()._emit(event, **data)
 
     def run(self):
         """Boot up the visual dashboard."""
@@ -108,9 +108,10 @@ class ResearchDeskApp(App):
         response = self.agent.chat(user_text)
         
         self.call_from_thread(self.chat_log.write, f"\n[bold purple]Agent:[/bold purple] {response}")
-        
-        # NEW: Refresh the UI title bar in case the agent just generated a new title!
         self.title = f"Research Desk — {self.agent.title} ({self.agent.session_id})"
+        
+        # NEW: Close the loop in the tool panel so it never looks stuck!
+        self.call_from_thread(self.log_tool, "[dim]--- Task Complete ---[/dim]\n")
 
     def on_input_submitted(self, event: Input.Submitted):
         """When you press Enter in the text box."""

@@ -112,28 +112,75 @@ class Agent:
         return {"error": f"Tool {name} not found"}
 
     def _emit(self, event: str, **data) -> None:
-        pass 
+        """Log tool executions to a permanent, per-session file."""
+        log_entry = ""
+        if event == "tool_start":
+            log_entry = f"START: {data.get('name')} with args: {data.get('args')}\n"
+        elif event == "tool_end":
+            log_entry = f"END: {data.get('name')} | Result length: {len(str(data.get('result', '')))} chars\n"
+        elif event == "tool_error":
+            log_entry = f"ERROR: {data.get('name')} | {data.get('error')}\n"
+            
+        if log_entry:
+            # Dynamically name the file based on the session ID
+            # We save it inside the .agent/ folder to keep your root directory clean
+            log_filename = f".agent/{self.session_id}_tools.log"
+            
+            with open(log_filename, "a", encoding="utf-8") as f:
+                f.write(log_entry)
 
     def run_once(self, prompt: str) -> str:
         return self.chat(prompt)
 
 
 class REPLAgent(Agent):
-    """Standard terminal interface."""
+    """Standard terminal interface with System Commands."""
+    
     def _emit(self, event: str, **data) -> None:
+        # 1. Print to the terminal screen
         if event == "tool_start":
             print(f"  [⚡ Executing Tool] {data['name']}")
+        # 2. Trigger the base Agent logger we just built to save it to the file
+        super()._emit(event, **data)
 
     def run(self):
-        print(f"Research Desk [Session: {self.session_id}] — Type /quit to exit\n")
+        print(f"Research Desk [Session: {self.session_id}] — Type /quit to exit")
         while True:
             try:
-                user_input = input("> ")
-                if user_input.strip() == "/quit":
+                user_input = input("\n> ").strip()
+                
+                # Command: Quit
+                if user_input == "/quit":
                     break
-                if not user_input.strip():
+                    
+                # Command: List Sessions
+                elif user_input == "/sessions":
+                    sessions = memory.list_sessions()
+                    print("\n--- Saved Sessions ---")
+                    for s in sessions:
+                        print(f"ID: {s['id']} | Title: {s['title']}")
                     continue
-                print(f"\nAgent: {self.chat(user_input)}\n")
+                    
+                # Command: Resume specific session
+                elif user_input.startswith("/resume "):
+                    new_id = user_input.split(" ")[1]
+                    try:
+                        history = memory.load_session(new_id)
+                        self.session_id = new_id
+                        self.messages = history.get("messages", [])
+                        self.title = history.get("title", "Untitled")
+                        print(f"\n✅ Resumed session: {self.title} ({new_id})")
+                    except FileNotFoundError:
+                        print(f"\n❌ Session '{new_id}' not found.")
+                    continue
+                
+                # Ignore empty inputs
+                elif not user_input:
+                    continue
+                
+                # Normal Chat routing
+                print(f"\nAgent: {self.chat(user_input)}")
+                
             except (KeyboardInterrupt, EOFError):
                 break
 
@@ -157,9 +204,11 @@ def main():
     # Launch the requested mode
     if args.tui:
         try:
-            from tui import TUIAgent
+            from tui import ResearchDeskApp, TUIAgent
             agent = TUIAgent(session_id=session_to_use)
-            agent.run()
+            app = ResearchDeskApp(agent)
+            agent.ui_callback = lambda msg: app.call_from_thread(app.log_tool, msg)
+            app.run()
         except ImportError:
             print("Error: tui.py not found. Make sure it is saved in the same directory.")
     elif args.query:
