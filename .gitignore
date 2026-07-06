@@ -5,7 +5,13 @@ week_3/README.md
 week_3/1_memory.md
 week_3/2_agent_class.md
 week_3/3_paper_tools.md
-
+week_4/1_command_execution.md
+week_4/2_todo_loop.md
+week_4/3_repo_search.md
+week_4/4_editing_and_verification.md
+week_4/5_memory_and_subagents.md
+week_4/6_tool_design.md
+week_4/README.md
 # Agent Local Data
 .agent/
 notes/
@@ -17,6 +23,7 @@ output/
 # Python Caches
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Log Files (Just in case any leak out of the .agent folder)
 *.log
@@ -29,3 +36,6 @@ env/
 # OS Generated Files
 .DS_Store
 Thumbs.db
+
+# Ignore the target test repositories
+/flask/
