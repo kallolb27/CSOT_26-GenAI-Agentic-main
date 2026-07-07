@@ -27,7 +27,7 @@ client = OpenAI(
     api_key=os.environ.get("OPENROUTER_API_KEY")
 )
 
-MODEL = "cohere/north-mini-code:free"
+MODEL = os.getenv("OPENROUTER_MODEL", "cohere/north-mini-code:free")
 
 # 3. Helper Functions
 def load_system_prompt() -> str:
@@ -191,6 +191,7 @@ def main():
         # --- REPL MODE ---
         print("🤖 Code Scout Agent Initialized (OpenRouter Backend)")
         print(f"🔗 Session ID: {session_id}")
+        print(f"🧠 Active Model: {MODEL}")
         print("Type 'exit' or 'quit' to end the session.")
         print("Type '/sessions' to view all history, or '/clear' to wipe this session.\n")
         print("-" * 50)
