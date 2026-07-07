@@ -110,33 +110,6 @@ As skills scale in complexity, `SKILL.md` acts as an orchestrator rather than ho
 
 This chained fetch mechanism ensures the LLM's active memory remains incredibly fast and efficient. It only loads massive reference documents or utilizes complex Python scripts exactly when the procedural workflow demands them.
 
-## 🧠 Anatomy of a Skill: Advanced Bundling
-
-The `skills/` directory operates as a localized "App Store" for Code Scout. Instead of loading one massive system prompt, workflows are compartmentalized into isolated micro-environments. As skills become more complex, they scale beyond a single markdown file into fully bundled directories containing their own scripts and reference materials.
-
-### 📂 Expanded Architecture Flow
-
-```mermaid
-graph TD
-    Root[📁 skills/] --> Git[📁 git-conventional-commits/]
-    Root --> PyTest[📁 python-pytest-tdd/]
-    Root --> React[📁 react-nextjs-components/]
-    
-    Git --> GitRef[📁 reference/]
-    Git --> GitScr[📁 scripts/]
-    Git --> GitMD[📄 SKILL.md]
-    
-    GitRef --> BP[📄 best_practices.md]
-    GitScr --> MC[🐍 make_commit.py]
-    
-    classDef folder fill:transparent,stroke:#3b82f6,stroke-width:2px,color:inherit;
-    classDef file fill:transparent,stroke:#10b981,stroke-width:2px,color:inherit;
-    classDef script fill:transparent,stroke:#f59e0b,stroke-width:2px,color:inherit;
-    
-    class Root,Git,PyTest,React,GitRef,GitScr folder;
-    class GitMD,BP file;
-    class MC script;
-
 ## 🔌 Universal MCP Gateway: Dynamic Server Integration
 
 Week 4's Code Scout relied entirely on hardcoded local Python functions. In Week 5, the agent has been upgraded to connect securely to the outside world using the **Model Context Protocol (MCP)**. 
