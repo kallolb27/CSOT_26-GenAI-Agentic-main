@@ -5,3 +5,5 @@ markdownify
 trafilatura
 textual
 pytest
+uv
+mcp
