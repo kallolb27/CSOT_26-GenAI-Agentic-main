@@ -75,11 +75,6 @@ In Week 4, teaching Code Scout a new workflow meant hardcoding a massive block o
 
 For Week 5, Code Scout implements a **Progressive Disclosure** architecture via a modular "App Store" of skills. 
 
-### ⚙️ How It Works (`tools/skills.py`)
-The `skills/` directory contains individual folders, each housing a `SKILL.md` file. Every file begins with YAML-style frontmatter defining the skill's `name` and `description`, followed by the heavy multi-step procedure body.
-
-At process startup, Code Scout parses only the frontmatter. The LLM's system prompt receives a lightweight, one-line summary of each available skill (costing ~15 tokens per skill). The full, token-heavy workflow is only injected into the active context window if the agent determines it needs the procedure and explicitly calls the `load_skill(name)` tool.
-
 ### 📚 Installed Skills
 
 1. **`python-pytest-tdd`**
@@ -91,6 +86,56 @@ At process startup, Code Scout parses only the frontmatter. The LLM's system pro
 3. **`git-conventional-commits`**
    * **Trigger:** *"Commit this", "Save my work"*
    * **Procedure:** Runs the test suite to prevent breaking commits. It then runs `git status` and `git diff`, prompts the user to review the staging area, and enforces strict conventional commit formatting (e.g., `feat(ui): add navbar`).
+
+### 🧠 The 3-Tier Skill Architecture
+
+Code Scout solves the "Context Window Bloat" problem by completely separating the *awareness* of a skill from the *knowledge* of how to execute it. 
+
+Instead of loading massive system prompts, workflows are compartmentalized into isolated micro-environments (folders). Each skill bundle contains its core instructions (`SKILL.md`), alongside dedicated `reference/` documents and executable `scripts/`. 
+
+The agent accesses this deep context dynamically using a strict **3-Tier Progressive Disclosure** mechanism:
+
+### ⚙️ Tier 1: Lightweight Indexing (Startup)
+When Code Scout boots up, the prompt builder scans the `skills/` directory. It ignores the heavy body content and parses *only* the YAML frontmatter of each `SKILL.md` file (the `name` and semantic `description`). 
+* **Result:** The LLM's base system prompt is injected with a highly compressed index of available skills, costing roughly ~15 tokens per capability. The agent knows what it *can* do, but not *how* to do it.
+
+### ⚙️ Tier 2: Context Hydration (Trigger & Fetch)
+When a user's prompt matches a skill's description (e.g., *"Scaffold a new module using TDD"*), the LLM utilizes its `load_skill(name)` tool. 
+* **Result:** The tool reads the procedural body of the requested `SKILL.md` file and returns it as a tool response. This injects the heavy instructions and step-by-step rules into the active conversation memory exactly when they are needed.
+
+### ⚙️ Tier 3: Asset Chaining (Deep Context & Execution)
+As skills scale in complexity, `SKILL.md` acts as an orchestrator rather than holding all the information itself. The instructions explicitly command the agent to use its standard local file tools to access the bundled assets exactly when a specific step is reached.
+* **Reading References:** *"If you need specific formatting rules, use `read_file` on `skills/git-conventional-commits/reference/best_practices.md`."*
+* **Executing Scripts:** *"To execute the final commit safely, use `run_command` to execute `skills/git-conventional-commits/scripts/make_commit.py` with your generated arguments."*
+
+This chained fetch mechanism ensures the LLM's active memory remains incredibly fast and efficient. It only loads massive reference documents or utilizes complex Python scripts exactly when the procedural workflow demands them.
+
+## 🧠 Anatomy of a Skill: Advanced Bundling
+
+The `skills/` directory operates as a localized "App Store" for Code Scout. Instead of loading one massive system prompt, workflows are compartmentalized into isolated micro-environments. As skills become more complex, they scale beyond a single markdown file into fully bundled directories containing their own scripts and reference materials.
+
+### 📂 Expanded Architecture Flow
+
+```mermaid
+graph TD
+    Root[📁 skills/] --> Git[📁 git-conventional-commits/]
+    Root --> PyTest[📁 python-pytest-tdd/]
+    Root --> React[📁 react-nextjs-components/]
+    
+    Git --> GitRef[📁 reference/]
+    Git --> GitScr[📁 scripts/]
+    Git --> GitMD[📄 SKILL.md]
+    
+    GitRef --> BP[📄 best_practices.md]
+    GitScr --> MC[🐍 make_commit.py]
+    
+    classDef folder fill:transparent,stroke:#3b82f6,stroke-width:2px,color:inherit;
+    classDef file fill:transparent,stroke:#10b981,stroke-width:2px,color:inherit;
+    classDef script fill:transparent,stroke:#f59e0b,stroke-width:2px,color:inherit;
+    
+    class Root,Git,PyTest,React,GitRef,GitScr folder;
+    class GitMD,BP file;
+    class MC script;
 
 ## 🔌 Universal MCP Gateway: Dynamic Server Integration
 
