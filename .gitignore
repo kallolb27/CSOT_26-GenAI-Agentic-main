@@ -39,3 +39,6 @@ Thumbs.db
 
 # Ignore the target test repositories
 /flask/
+
+# Local Database
+sandbox.db
