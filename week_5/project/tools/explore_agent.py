@@ -26,7 +26,7 @@ client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ.get("OPENROUTER_API_KEY")
 )
-MODEL = "openrouter/free" 
+MODEL = os.getenv("OPENROUTER_MODEL","cohere/north-mini-code:free") 
 
 # 1. Build the Restricted Toolset
 SUBAGENT_TOOLS = []
